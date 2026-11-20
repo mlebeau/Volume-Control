@@ -86,6 +86,7 @@
 @property (assign, nonatomic) bool StayAheadOfOtherApps;
 @property (assign, nonatomic) bool ControlDisplayVolume;
 @property (assign, nonatomic) bool UseAppleCMDModifier;
+@property (assign, nonatomic) bool PassVolumeKeysWithoutCommand;
 @property (assign, nonatomic) bool LockSystemAndPlayerVolume;
 @property (assign, nonatomic) bool AppleCMDModifierPressed;
 @property (assign, nonatomic) bool AutomaticUpdates;
@@ -94,6 +95,7 @@
 @property (assign, nonatomic) bool loadIntroAtStart;
 
 - (IBAction)toggleUseAppleCMDModifier:(id)sender;
+- (IBAction)togglePassVolumeKeysWithoutCommand:(id)sender;
 - (IBAction)toggleLockSystemAndPlayerVolume:(id)sender;
 - (IBAction)toggleAutomaticUpdates:(id)sender;
 - (IBAction)toggleHideFromStatusBar:(id)sender;
@@ -116,7 +118,8 @@
                                           keyState:(BOOL)keyState
                                        keyIsRepeat:(BOOL)keyIsRepeat
                                        keyModifier:(CGEventFlags)keyModifier
-                                  keyboardModifier:(CGEventFlags)keyboardModifier;
+                                  keyboardModifier:(CGEventFlags)keyboardModifier
+                                       commandHeld:(BOOL)commandHeld;
 
 @end
 

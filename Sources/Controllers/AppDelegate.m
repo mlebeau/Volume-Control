@@ -9,6 +9,7 @@
 
 #import "AppDelegate.h"
 #import "SystemVolume.h"
+#import "VolumeKeyRouting.h"
 #import "AccessibilityDialog.h"
 #import "TahoeVolumeHUD.h"
 
@@ -39,6 +40,7 @@ void handleSIGTERM(int sig) {
 #define HIDE_VOLUME_WINDOW_ID 6
 #define STAY_AHEAD_ID 10
 #define CONTROL_DISPLAY_VOLUME_ID 11
+#define PASS_VOLUME_KEYS_WITHOUT_COMMAND_ID 12
 
 // "Stay ahead of other apps": how often the tap order is checked,
 // and the race rule. If Volume Control has to move its tap back in front
@@ -66,6 +68,11 @@ static const NSInteger kPassThroughEventTag = 0x0056434B; // 'VCK'
 // main thread on key-down and cleared by either thread on key-up, so it is
 // accessed atomically across the tap and main threads.
 static _Atomic(int) gPassThroughKeyCode = -1;
+
+// The preference is written by the menu and read by the event tap. The press
+// state belongs to the tap; only fresh presses consult the preference.
+static _Atomic(bool) gPassVolumeKeysWithoutCommand = false;
+static VCVolumeKeyPress gVolumeKeyPresses[3] = {0};
 
 // When the tap last received a media key (volume, brightness, play, ...), as
 // CFAbsoluteTime, or 0 if never. For the diagnostics report: unlike
@@ -158,6 +165,23 @@ CGEventRef event_tap_callback(CGEventTapProxy proxy, CGEventType type, CGEventRe
     // flags the system stored on the event. Recorded for the diagnostics report.
     CGEventFlags keyboardModifier = CGEventSourceFlagsState(kCGEventSourceStateHIDSystemState);
 
+    int volumeKeyIndex;
+    switch (keyCode) {
+        case NX_KEYTYPE_SOUND_UP:   volumeKeyIndex = 0; break;
+        case NX_KEYTYPE_SOUND_DOWN: volumeKeyIndex = 1; break;
+        case NX_KEYTYPE_MUTE:       volumeKeyIndex = 2; break;
+        default: return event;
+    }
+
+    BOOL commandHeld = (CGEventGetFlags(event) & kCGEventFlagMaskCommand) != 0 ||
+                       (keyboardModifier & kCGEventFlagMaskCommand) != 0;
+    BOOL optionHeld = (CGEventGetFlags(event) & kCGEventFlagMaskAlternate) != 0 ||
+                      (keyboardModifier & kCGEventFlagMaskAlternate) != 0;
+    VCVolumeKeyRoute route = VCVolumeKeyRouteEvent(&gVolumeKeyPresses[volumeKeyIndex],
+                                                  keyState, keyIsRepeat,
+                                                  atomic_load(&gPassVolumeKeysWithoutCommand),
+                                                  commandHeld, optionHeld);
+
     // If this key is currently handed off to macOS (because the output device
     // has no controllable volume), let its auto-repeat events and its release
     // flow straight through until the key is released, so macOS ramps natively.
@@ -168,39 +192,34 @@ CGEventRef event_tap_callback(CGEventTapProxy proxy, CGEventType type, CGEventRe
         return event;
     }
 
-    // Decide here if it's a volume/mute event
-    BOOL isMediaKey = (keyCode == NX_KEYTYPE_MUTE ||
-                       keyCode == NX_KEYTYPE_SOUND_UP ||
-                       keyCode == NX_KEYTYPE_SOUND_DOWN);
+    // Return the original event before queueing player/system volume work.
+    // macOS owns its volume change, HUD, feedback and native modifier behavior.
+    if (route == VCVolumeKeyPassThrough) return event;
+
+    if (route == VCVolumeKeyWithCommand) commandHeld = YES;
 
     // With Option held, macOS opens the Sound settings (Option + volume or mute
     // key) or changes the volume in fine steps (Option + Shift + volume key).
     // Hand such a press to macOS, with its auto-repeats and release. Option
     // counts as held if either the event or the keyboard says so, as Command
     // does in -handleAsynchronouslyTappedEventWithKeyCode:.
-    BOOL optionHeld = (CGEventGetFlags(event) & kCGEventFlagMaskAlternate) != 0 ||
-                      (keyboardModifier & kCGEventFlagMaskAlternate) != 0;
-    if (isMediaKey && keyState == 1 && optionHeld) {
+    if (route == VCVolumeKeyExistingBehavior && keyState == 1 && optionHeld) {
         atomic_store(&gPassThroughKeyCode, keyCode);
         return event;
     }
 
-    if(isMediaKey /*&& keyModifier==1114111*/) {
-        // Hand off all actual logic to main thread
-        dispatch_async(dispatch_get_main_queue(), ^{
-            AppDelegate *app = (__bridge AppDelegate *)refcon;
-            [app handleAsynchronouslyTappedEventWithKeyCode:keyCode
-                                                   keyState:keyState
-                                                keyIsRepeat:keyIsRepeat
-                                                keyModifier:keyModifier
-                                           keyboardModifier:keyboardModifier];
-        });
-        
-        return NULL;
-    } else {
-        // Always return immediately to keep the system input flowing
-        return event;
-    }
+    // Hand off all actual logic to main thread.
+    dispatch_async(dispatch_get_main_queue(), ^{
+        AppDelegate *app = (__bridge AppDelegate *)refcon;
+        [app handleAsynchronouslyTappedEventWithKeyCode:keyCode
+                                               keyState:keyState
+                                            keyIsRepeat:keyIsRepeat
+                                            keyModifier:keyModifier
+                                       keyboardModifier:keyboardModifier
+                                            commandHeld:commandHeld];
+    });
+
+    return NULL;
 }
 
 
@@ -1461,13 +1480,16 @@ static NSTimeInterval updateSystemVolumeInterval=0.1f;
                                        keyIsRepeat:(BOOL)keyIsRepeat
                                        keyModifier:(CGEventFlags)keyModifier
                                   keyboardModifier:(CGEventFlags)keyboardModifier
+                                       commandHeld:(BOOL)commandHeld
 {
     // On some setups the volume key event arrives without the Command bit
     // although Command is held (seen on macOS 27 with a MacBookPro18,1), so
     // Command counts as pressed if either the event or the keyboard says so.
     BOOL eventCmd    = (keyModifier & NX_COMMANDMASK) == NX_COMMANDMASK;
     BOOL keyboardCmd = (keyboardModifier & kCGEventFlagMaskCommand) == kCGEventFlagMaskCommand;
-    [self setAppleCMDModifierPressed:eventCmd || keyboardCmd];
+    // The tap keeps Command active through the release of an app-owned press
+    // in passthrough mode, even if the physical modifier was released first.
+    [self setAppleCMDModifierPressed:commandHeld];
 
     // The "not running" alert of Control display volume appears only for a
     // press, not for an auto-repeat (see -showDisplayAppMissing). The flag is
@@ -1935,6 +1957,7 @@ static NSTimeInterval updateSystemVolumeInterval=0.1f;
 						  [NSNumber numberWithInt:2],      @"volumeIncrement",
 						  [NSNumber numberWithBool:true] , @"TappingEnabled",
 						  [NSNumber numberWithBool:false], @"UseAppleCMDModifier",
+						  [NSNumber numberWithBool:false], @"PassVolumeKeysWithoutCommand",
 						  [NSNumber numberWithBool:false], @"LockSystemAndPlayerVolume",
 						  [NSNumber numberWithBool:true],  @"AutomaticUpdates",
 						  [NSNumber numberWithBool:false], @"hideFromStatusBarPreference",
@@ -1953,6 +1976,7 @@ static NSTimeInterval updateSystemVolumeInterval=0.1f;
     
 	[self setTapping:[preferences boolForKey:              @"TappingEnabled"]];
 	[self setUseAppleCMDModifier:[preferences boolForKey:  @"UseAppleCMDModifier"]];
+	[self setPassVolumeKeysWithoutCommand:[preferences boolForKey:@"PassVolumeKeysWithoutCommand"]];
 	[self setLockSystemAndPlayerVolume:[preferences boolForKey:  @"LockSystemAndPlayerVolume"]];
 	[self setAutomaticUpdates:[preferences boolForKey:     @"AutomaticUpdates"]];
 	[self setHideFromStatusBar:[preferences boolForKey:    @"hideFromStatusBarPreference"]];
@@ -2026,6 +2050,24 @@ static NSTimeInterval updateSystemVolumeInterval=0.1f;
 - (IBAction)toggleUseAppleCMDModifier:(id)sender
 {
 	[self setUseAppleCMDModifier:![self UseAppleCMDModifier]];
+}
+
+- (bool)PassVolumeKeysWithoutCommand
+{
+    return atomic_load(&gPassVolumeKeysWithoutCommand);
+}
+
+- (void)setPassVolumeKeysWithoutCommand:(bool)enabled
+{
+    [preferences setBool:enabled forKey:@"PassVolumeKeysWithoutCommand"];
+    [preferences synchronize];
+    [[_statusMenu itemWithTag:PASS_VOLUME_KEYS_WITHOUT_COMMAND_ID] setState:enabled];
+    atomic_store(&gPassVolumeKeysWithoutCommand, enabled);
+}
+
+- (IBAction)togglePassVolumeKeysWithoutCommand:(id)sender
+{
+    [self setPassVolumeKeysWithoutCommand:![self PassVolumeKeysWithoutCommand]];
 }
 
 - (IBAction)toggleLockSystemAndPlayerVolume:(id)sender
@@ -3009,6 +3051,7 @@ static const OSStatus kAutomationCheckTimedOut = 1;
 {
     NSMutableString *r = [NSMutableString string];
     [r appendFormat:@"Command key inverts app/system : %@\n", [self UseAppleCMDModifier]       ? @"yes" : @"no"];
+    [r appendFormat:@"Pass keys without Command      : %@\n", [self PassVolumeKeysWithoutCommand] ? @"yes" : @"no"];
     [r appendFormat:@"Lock system and player volume  : %@\n", [self LockSystemAndPlayerVolume] ? @"yes" : @"no"];
     [r appendFormat:@"Volume HUD                     : %@\n", [self hideVolumeWindow]          ? @"hidden" : @"shown"];
     [r appendFormat:@"Hidden from status bar         : %@\n", [self hideFromStatusBar]         ? @"yes" : @"no"];

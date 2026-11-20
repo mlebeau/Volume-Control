@@ -69,6 +69,12 @@
                         <action selector="toggleUseAppleCMDModifier:" target="3" id="EUK-S1-Znp"/>
                     </connections>
                 </menuItem>
+                <menuItem title="Pass volume keys without ⌘ to macOS" toolTip="Use with Invert behavior of ⌘ modifier to control a music player with ⌘ and let macOS handle ordinary volume and mute keys, including its own volume display and sound feedback." tag="12" id="pvc-01-menu">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <connections>
+                        <action selector="togglePassVolumeKeysWithoutCommand:" target="3" id="pvc-02-actn"/>
+                    </connections>
+                </menuItem>
                 <menuItem title="Lock system to player volume" tag="9" id="0wR-vQ-Snd" userLabel="Simultaneous changes">
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <connections>

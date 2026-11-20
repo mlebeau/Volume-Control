@@ -71,6 +71,7 @@ A menu-bar app for macOS that sets how long the animations take when you switch 
 - When Music, Spotify, Doppler, or Swinsian is playing, volume keys affect their volume; otherwise, they adjust system volume.
 - Holding `⌘` (Command) key inverts this behavior.
 - Toggle behavior with the "Use ⌘ modifier" option.
+- **Pass volume keys without ⌘ to macOS** (off by default): lets macOS handle ordinary volume and mute keys, including its native volume display and sound feedback. Enable this together with **Invert behavior of ⌘ modifier** to use ⌘ + volume/mute for the selected playing music app. Option + volume and Option + Shift + volume retain their native behavior. A held key stays with its original recipient until released, even if you press or release ⌘ in the meantime.
 
 ---
 

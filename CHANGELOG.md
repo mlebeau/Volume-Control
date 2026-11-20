@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Pass volume keys without ⌘ to macOS**, off by default. Together with **Invert behavior of ⌘ modifier**, ordinary volume and mute keys use macOS's native handling, display and sound feedback; ⌘ + volume/mute continues to control the selected playing music app. Held keys keep their original recipient through repeats and release.
+
 ## [2.7.1] - 2026-10-27
 
 ### Fixed

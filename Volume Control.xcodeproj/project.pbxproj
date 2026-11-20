@@ -53,6 +53,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		B87E3C5AA4E14D91B654CAB1 /* VolumeKeyRouting.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = VolumeKeyRouting.h; sourceTree = "<group>"; };
 		65220C75267F49CB007BE316 /* generate_keys.rb */ = {isa = PBXFileReference; lastKnownFileType = text.script.ruby; path = generate_keys.rb; sourceTree = "<group>"; };
 		65220C76267F49D4007BE316 /* sign_update.rb */ = {isa = PBXFileReference; lastKnownFileType = text.script.ruby; path = sign_update.rb; sourceTree = "<group>"; };
 		6546E1892E8C66FB0087E95F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -215,6 +216,7 @@
 			children = (
 				65996E14267EB14F0080A9A5 /* AppDelegate.h */,
 				65996E13267EB14F0080A9A5 /* AppDelegate.m */,
+				B87E3C5AA4E14D91B654CAB1 /* VolumeKeyRouting.h */,
 				65996E10267EB14F0080A9A5 /* OSD.h */,
 				65996E15267EB14F0080A9A5 /* SystemVolume.h */,
 				65996E16267EB14F0080A9A5 /* SystemVolume.m */,
