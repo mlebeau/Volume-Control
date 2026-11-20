@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- The volume HUD now shows the name of the controlled music player instead of the system audio output. Volume changes, mute and unmute use the same player name; system and display volume retain the audio output's name.
+
 ## [2.7.1] - 2026-10-27
 
 ### Fixed
