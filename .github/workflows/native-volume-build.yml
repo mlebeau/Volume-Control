@@ -1,0 +1,93 @@
+name: Build and test native volume keys
+
+on:
+  push:
+    branches: [native-volume-key-build]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.repository == 'mlebeau/Volume-Control'
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Show build environment
+        run: |
+          sw_vers
+          xcodebuild -version
+
+      - name: Test key-press routing
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -fsanitize=address,undefined \
+            Tests/VolumeKeyRoutingTests.c -o "$RUNNER_TEMP/volume-key-routing-tests"
+          "$RUNNER_TEMP/volume-key-routing-tests"
+
+      - name: Configure personal build
+        run: |
+          cat > LocalSigning.xcconfig <<'CONFIG'
+          DEVELOPMENT_TEAM =
+          BUNDLE_ID_BASE = com.mlebeau.VolumeControlNativeKeys
+          CONFIG
+          # Isolate this build's preferences and disable automatic upstream
+          # updates by default. The upstream contribution keeps its defaults.
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          source = Path('Sources/Controllers/AppDelegate.m')
+          text, count = re.subn(r'(\[NSNumber numberWithBool:)true(\],\s*@"AutomaticUpdates")',
+                                r'\1false\2', source.read_text())
+          assert count == 1
+          source.write_text(text)
+          PY
+
+      - name: Build universal macOS application
+        run: |
+          set -o pipefail
+          xcodebuild -project 'Volume Control.xcodeproj' -scheme 'Volume Control' \
+            -configuration Release -derivedDataPath "$RUNNER_TEMP/VolumeControlDerived" \
+            -destination 'generic/platform=macOS' \
+            ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO MACOSX_DEPLOYMENT_TARGET=13.5 \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            build 2>&1 | tee "$RUNNER_TEMP/volume-build.log"
+
+      - name: Test native event callback and preference wiring
+        run: bash bin/test_volume_events.sh "$RUNNER_TEMP/VolumeControlDerived"
+
+      - name: Package personal test build
+        run: |
+          mkdir -p "$RUNNER_TEMP/artifacts"
+          original="$RUNNER_TEMP/VolumeControlDerived/Build/Products/Release/Volume Control.app"
+          app="$RUNNER_TEMP/Volume Control Native Keys.app"
+          ditto "$original" "$app"
+          /usr/libexec/PlistBuddy -c 'Set :CFBundleDisplayName Volume Control Native Keys' "$app/Contents/Info.plist"
+          # Ad-hoc signing supports local testing; this is not a notarized
+          # Developer ID release. No developer certificates are used.
+          codesign --force --deep --sign - --entitlements VolumeControl/VolumeControl.entitlements "$app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          lipo -archs "$app/Contents/MacOS/Volume Control"
+          plutil -lint "$app/Contents/Info.plist"
+          ditto -c -k --sequesterRsrc --keepParent "$app" "$RUNNER_TEMP/artifacts/Volume-Control-Native-Keys.zip"
+          # Include the exact source used for this personal build.
+          git ls-files -z | tar --null -T - --exclude='Releases/*' -czf "$RUNNER_TEMP/artifacts/Volume-Control-Native-Keys-source.tar.gz"
+          shasum -a 256 "$RUNNER_TEMP/artifacts/Volume-Control-Native-Keys.zip"
+
+      - name: Upload test application and source
+        uses: actions/upload-artifact@v4
+        with:
+          name: Volume-Control-Native-Keys
+          path: ${{ runner.temp }}/artifacts/*
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macOS-build-log
+          path: ${{ runner.temp }}/volume-build.log
+          retention-days: 14
