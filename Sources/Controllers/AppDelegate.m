@@ -276,6 +276,7 @@ CGEventRef event_tap_callback(CGEventTapProxy proxy, CGEventType type, CGEventRe
 
 // Forward declare private methods
 - (id)runningPlayer;
+- (NSString *)volumeHUDLabelForPlayer:(id)player;
 - (void)completeInitialization;
 - (void)setVolumeUp:(bool)increase;
 - (void)repostSystemDefinedKey:(int)keyCode keyDown:(BOOL)keyDown;
@@ -1669,7 +1670,7 @@ static NSTimeInterval updateSystemVolumeInterval=0.1f;
             if(!_hideVolumeWindow){
                 if (@available(macOS 16.0, *)) {
                     // On Tahoe, show the new popover HUD.
-                    [[TahoeVolumeHUD sharedManager] showHUDWithVolume:0 usingMusicPlayer:runningPlayerPtr andLabel:[systemAudio getDefaultOutputDeviceName]  anchoredToStatusButton:([self hideFromStatusBar] ? nil : self.statusBar.button)];
+                    [[TahoeVolumeHUD sharedManager] showHUDWithVolume:0 usingMusicPlayer:runningPlayerPtr andLabel:[self volumeHUDLabelForPlayer:runningPlayerPtr] anchoredToStatusButton:([self hideFromStatusBar] ? nil : self.statusBar.button)];
                 } else {
                     // On older systems, use the classic OSD.
                     id osdMgr = [self->OSDManager sharedManager];
@@ -1691,7 +1692,7 @@ static NSTimeInterval updateSystemVolumeInterval=0.1f;
             {
                 if (@available(macOS 16.0, *)) {
                     // On Tahoe, show the new popover HUD.
-                    [[TahoeVolumeHUD sharedManager] showHUDWithVolume:[runningPlayerPtr oldVolume] usingMusicPlayer:runningPlayerPtr andLabel:[systemAudio getDefaultOutputDeviceName] anchoredToStatusButton:([self hideFromStatusBar] ? nil : self.statusBar.button)];
+                    [[TahoeVolumeHUD sharedManager] showHUDWithVolume:[runningPlayerPtr oldVolume] usingMusicPlayer:runningPlayerPtr andLabel:[self volumeHUDLabelForPlayer:runningPlayerPtr] anchoredToStatusButton:([self hideFromStatusBar] ? nil : self.statusBar.button)];
                 } else {
                     // On older systems, use the classic OSD.
                     id osdMgr = [self->OSDManager sharedManager];
@@ -3022,6 +3023,15 @@ static const OSStatus kAutomationCheckTimedOut = 1;
     return @"?";
 }
 
+- (NSString *)volumeHUDLabelForPlayer:(id)player
+{
+    // Match the title to the player that supplies the HUD's icon and volume.
+    // System and display volume keep the name of the current audio output.
+    if ([player isKindOfClass:[PlayerApplication class]])
+        return [self nameOfPlayer:player];
+    return [systemAudio getDefaultOutputDeviceName];
+}
+
 // The last initial volume key press. The volume keys arrive as system-defined
 // events; the app counts ⌘ as pressed if the flags stored on the event or the
 // keyboard state say so. When the event arrives without the ⌘ bit, "on the
@@ -3344,7 +3354,7 @@ static const OSStatus kAutomationCheckTimedOut = 1;
         {
             if (@available(macOS 16.0, *)) {
                 // On Tahoe, show the new popover HUD anchored to the status item.
-                [[TahoeVolumeHUD sharedManager] showHUDWithVolume:volume usingMusicPlayer:runningPlayerPtr andLabel:[systemAudio getDefaultOutputDeviceName] anchoredToStatusButton:([self hideFromStatusBar] ? nil : self.statusBar.button)];
+                [[TahoeVolumeHUD sharedManager] showHUDWithVolume:volume usingMusicPlayer:runningPlayerPtr andLabel:[self volumeHUDLabelForPlayer:runningPlayerPtr] anchoredToStatusButton:([self hideFromStatusBar] ? nil : self.statusBar.button)];
             } else {
                 if(image) {
                     id osdMgr = [self->OSDManager sharedManager];

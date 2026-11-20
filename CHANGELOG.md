@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - **Pass volume keys without ⌘ to macOS**, off by default. Together with **Invert behavior of ⌘ modifier**, ordinary volume and mute keys use macOS's native handling, display and sound feedback; ⌘ + volume/mute continues to control the selected playing music app. Held keys keep their original recipient through repeats and release.
 
+### Fixed
+
+- The volume HUD now shows the name of the controlled music player instead of the system audio output. Volume changes, mute and unmute use the same player name; system and display volume retain the audio output's name.
+
 ## [2.7.1] - 2026-10-27
 
 ### Fixed
