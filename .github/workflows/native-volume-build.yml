@@ -64,7 +64,15 @@ jobs:
           original="$RUNNER_TEMP/VolumeControlDerived/Build/Products/Release/Volume Control.app"
           app="$RUNNER_TEMP/Volume Control Native Keys.app"
           ditto "$original" "$app"
-          /usr/libexec/PlistBuddy -c 'Set :CFBundleDisplayName Volume Control Native Keys' "$app/Contents/Info.plist"
+          python3 - "$app/Contents/Info.plist" <<'PY'
+          from pathlib import Path
+          import plistlib
+          import sys
+          info = Path(sys.argv[1])
+          data = plistlib.loads(info.read_bytes())
+          data['CFBundleDisplayName'] = 'Volume Control Native Keys'
+          info.write_bytes(plistlib.dumps(data))
+          PY
           # Ad-hoc signing supports local testing; this is not a notarized
           # Developer ID release. No developer certificates are used.
           codesign --force --deep --sign - --entitlements VolumeControl/VolumeControl.entitlements "$app"
@@ -73,7 +81,8 @@ jobs:
           plutil -lint "$app/Contents/Info.plist"
           ditto -c -k --sequesterRsrc --keepParent "$app" "$RUNNER_TEMP/artifacts/Volume-Control-Native-Keys.zip"
           # Include the exact source used for this personal build.
-          git ls-files -z | tar --null -T - --exclude='Releases/*' -czf "$RUNNER_TEMP/artifacts/Volume-Control-Native-Keys-source.tar.gz"
+          git ls-files -z | tar -czf "$RUNNER_TEMP/artifacts/Volume-Control-Native-Keys-source.tar.gz" \
+            --exclude='Releases/*' --null -T - LocalSigning.xcconfig
           shasum -a 256 "$RUNNER_TEMP/artifacts/Volume-Control-Native-Keys.zip"
 
       - name: Upload test application and source
